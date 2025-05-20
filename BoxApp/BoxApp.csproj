@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Box.Sdk.Gen" Version="1.10.0" />
+    <PublishReadyToRunExclude Include="bc-fips-1.0.2.dll" />
+    <PublishReadyToRunExclude Include="bcpkix-fips-1.0.2.dll" />
+  </ItemGroup>
+
+</Project>
