@@ -1,12 +1,17 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using Box.Sdk.Gen;
+using Box.Sdk.Gen.Managers;
 using System.CommandLine;
 
-public class BoxFolderLister
+public class BoxUtils
 {
     private readonly BoxClient _client;
 
-    public BoxFolderLister(string configFile)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BoxUtils"/> class using the specified Box JWT configuration file.
+    /// </summary>
+    /// <param name="configFile">Path to the Box JWT config JSON file.</param>
+    public BoxUtils(string configFile)
     {
         // Initialize the Box client using JWT authentication
         var auth = new BoxJwtAuth(JwtConfig.FromConfigFile(configFile));
@@ -16,6 +21,10 @@ public class BoxFolderLister
     // <summary>
     // Lists items in a specified folder.
     // </summary>
+    // <description>
+    // Lists all items (files, folders, and web links) in the specified Box folder 
+    // (see https://developer.box.com/reference/get-folders-id-items/).
+    // </description>
     // <param name="folderId">The ID of the folder to list items from.</param>
     public async Task ListFolderItemsAsync(string folderId)
     {
@@ -24,22 +33,7 @@ public class BoxFolderLister
         {
             foreach (var item in folder.Entries)
             {
-                if (item.FolderMini != null)
-                {
-                    Console.WriteLine($"Folder: {item.FolderMini.Name} (ID: {item.FolderMini.Id})");
-                }
-                else if (item.FileFull != null)
-                {
-                    Console.WriteLine($"File: {item.FileFull.Name} (ID: {item.FileFull.Id})");
-                }
-                else if (item.WebLink != null)
-                {
-                    Console.WriteLine($"Web Link: {item.WebLink.Name} (ID: {item.WebLink.Id})");
-                }
-                else
-                {
-                    Console.WriteLine($"Unknown item type: {item.GetType()}");
-                }
+                Console.WriteLine($"{GetItemType(item)} called '{GetNameFromItem(item)}' with ID {GetIdFromItem(item)}");
             }
         }
         else
@@ -48,6 +42,16 @@ public class BoxFolderLister
         }
     }
 
+    /// <summary>
+    /// Finds and prints the Box item (file, folder, or web link) corresponding to the specified path.
+    /// The path is split by '/' and traversed from the root folder to locate the item.
+    /// </summary>
+    /// <description>
+    /// Starting from the root folder, this method traverses the Box folder structure
+    /// by calling getFolderItemsAsync for each part of the path.  If the item is found based on
+    /// the path part, it loops back with the new folder ID.  If the item is not found, it breaks out of the loop.
+    /// </description>
+    /// <param name="path">The slash-separated path to the item (e.g., "Folder1/Subfolder2/File.txt").</param>
     public async Task ItemIdByPath(string path)
     {
         var pathParts = path.Split(['/'], StringSplitOptions.RemoveEmptyEntries);
@@ -81,6 +85,38 @@ public class BoxFolderLister
         else
         {
             Console.WriteLine($"Item '{path}' not found.");
+        }
+    }
+
+    /// <summary>
+    /// Uploads a file to the specified Box folder.
+    /// </summary>
+    /// <param name="folderId">The ID of the Box folder to upload the file to.</param>
+    /// <param name="filePath">The local path to the file to be uploaded.</param>
+    /// <returns>A task representing the asynchronous upload operation.</returns>
+    public async Task UploadFile(string folderId, string filePath)
+    {
+        // Get the file name from the file path
+        var fileName = Path.GetFileName(filePath);
+        // Get the file content as a stream
+        using var fileContentStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+        var uploadResult = await _client.Uploads.UploadFileAsync(
+            requestBody: new UploadFileRequestBody(
+                attributes: new UploadFileRequestBodyAttributesField(
+                    name: fileName,
+                    parent: new UploadFileRequestBodyAttributesParentField(id: folderId)),
+                file: fileContentStream
+            )
+        );
+        // Optionally print result
+        if (uploadResult.Entries != null && uploadResult.Entries.Count > 0)
+        {
+            var uploadedFile = uploadResult.Entries[0];
+            Console.WriteLine($"Uploaded file '{uploadedFile?.Name}' with ID {uploadedFile?.Id}");
+        }
+        else
+        {
+            Console.WriteLine("File upload did not return any entries.");
         }
     }
 
@@ -180,7 +216,7 @@ class Program
         itemsCommand.SetHandler(
             async (string configFile, string id) =>
             {
-                var lister = new BoxFolderLister(configFile);
+                var lister = new BoxUtils(configFile);
                 await lister.ListFolderItemsAsync(id);
             },
             configOption, idOption
@@ -196,16 +232,39 @@ class Program
         getItemForPathCommand.SetHandler(
             async (string configFile, string path) =>
             {
-                var lister = new BoxFolderLister(configFile);
+                var lister = new BoxUtils(configFile);
                 await lister.ItemIdByPath(path);
             },
             configOption, pathOption
+        );
+
+        var uploadCommand = new Command("upload", "Upload a file to a folder");
+        var folderIdOption = new Option<string>(
+            "--folder-id",
+            "ID of the folder to upload the file to"
+        )
+        { IsRequired = true };
+        var filePathOption = new Option<string>(
+            "--file-path",
+            "Path to the file to upload"
+        )
+        { IsRequired = true };
+        uploadCommand.AddOption(folderIdOption);
+        uploadCommand.AddOption(filePathOption);
+        uploadCommand.SetHandler(
+            async (string configFile, string folderId, string filePath) =>
+            {
+                var lister = new BoxUtils(configFile);
+                await lister.UploadFile(folderId, filePath);
+            },
+            configOption, folderIdOption, filePathOption
         );
 
         var rootCommand = new RootCommand("Box Folder Lister Tool");
         rootCommand.AddOption(configOption);
         rootCommand.AddCommand(itemsCommand);
         rootCommand.AddCommand(getItemForPathCommand);
+        rootCommand.AddCommand(uploadCommand);
 
         return await rootCommand.InvokeAsync(args);
     }
