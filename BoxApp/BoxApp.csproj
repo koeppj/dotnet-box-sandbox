@@ -9,6 +9,13 @@
 
   <ItemGroup>
     <PackageReference Include="Box.Sdk.Gen" Version="1.10.0" />
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PublishReadyToRunExclude Include="bc-fips-1.0.2.dll" />
     <PublishReadyToRunExclude Include="bcpkix-fips-1.0.2.dll" />
   </ItemGroup>
