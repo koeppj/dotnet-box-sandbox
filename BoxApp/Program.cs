@@ -11,11 +11,24 @@ public class BoxUtils
     /// Initializes a new instance of the <see cref="BoxUtils"/> class using the specified Box JWT configuration file.
     /// </summary>
     /// <param name="configFile">Path to the Box JWT config JSON file.</param>
-    public BoxUtils(string configFile)
+    public BoxUtils(string configFile, string? asUserId = null)
     {
+        // Validate the config file path
+        if (string.IsNullOrEmpty(configFile) || !File.Exists(configFile))
+        {
+            throw new ArgumentException("Invalid config file path.", nameof(configFile));
+        }
         // Initialize the Box client using JWT authentication
         var auth = new BoxJwtAuth(JwtConfig.FromConfigFile(configFile));
-        _client = new BoxClient(auth);
+        var client = new BoxClient(auth);
+        if (!string.IsNullOrEmpty(asUserId))
+        {
+            _client = client.WithAsUserHeader(asUserId);
+        }
+        else
+        {
+            _client = client;
+        }
     }
 
     // <summary>
@@ -28,9 +41,15 @@ public class BoxUtils
     // <param name="folderId">The ID of the folder to list items from.</param>
     public async Task ListFolderItemsAsync(string folderId)
     {
+        GetFolderByIdHeaders _apiHeaders = new GetFolderByIdHeaders();
         var folder = await _client.Folders.GetFolderItemsAsync(folderId);
         if (folder.Entries != null)
         {
+            if (folder.Entries.Count == 0)
+            {
+                Console.WriteLine($"Folder {folderId} is empty.");
+                return;
+            }
             foreach (var item in folder.Entries)
             {
                 Console.WriteLine($"{GetItemType(item)} called '{GetNameFromItem(item)}' with ID {GetIdFromItem(item)}");
@@ -120,6 +139,30 @@ public class BoxUtils
         }
     }
 
+    public async Task ApplyMatadataToItem(string itemId )
+    {  
+        Dictionary<string, object> metadata = new Dictionary<string, object>
+        {
+            { "documentnumber", "12345" },
+            { "batchname", "A Batch" },
+            { "doctype", "TITLE" },
+            { "issueDate", DateTime.UtcNow.ToString("yyyy-MM-ddT00:00:00Z") },
+        };  
+        await _client.FileMetadata.CreateFileMetadataByIdAsync(
+            itemId,
+            CreateFileMetadataByIdScope.Enterprise,
+            "titleDocuments",
+            metadata
+        );
+        Console.WriteLine($"Applied metadata to item with ID {itemId}");
+    }
+
+    public async Task DeleteFile(string itemId)
+    {
+        await _client.Files.DeleteFileByIdAsync(itemId);
+        Console.WriteLine($"Deleted file with ID {itemId}");
+    }
+
     private static Box.Sdk.Gen.Schemas.FileFullOrFolderMiniOrWebLink? FindItemInEntries(
         string itemName,
         IReadOnlyList<Box.Sdk.Gen.Schemas.FileFullOrFolderMiniOrWebLink> entries)
@@ -206,6 +249,12 @@ class Program
             "Path to the Box JWT config JSON file"
         )
         { IsRequired = true };
+        var asUserOption = new Option<string>(
+            "--as-user",
+            "User ID to impersonate"
+        )
+        { IsRequired = false };
+        
         var itemsCommand = new Command("items", "List items in a folder");
         var idOption = new Option<string>(
             "--id",
@@ -214,12 +263,12 @@ class Program
         { IsRequired = true };
         itemsCommand.AddOption(idOption);
         itemsCommand.SetHandler(
-            async (string configFile, string id) =>
+            async (string configFile, string id, string asUser) =>
             {
-                var lister = new BoxUtils(configFile);
+                var lister = new BoxUtils(configFile, asUser);
                 await lister.ListFolderItemsAsync(id);
             },
-            configOption, idOption
+            configOption, idOption, asUserOption
         );
 
         var getItemForPathCommand = new Command("get-item", "Get Item for a path");
@@ -230,12 +279,12 @@ class Program
         { IsRequired = true };
         getItemForPathCommand.AddOption(pathOption);
         getItemForPathCommand.SetHandler(
-            async (string configFile, string path) =>
+            async (string configFile, string path, string asUser) =>
             {
-                var lister = new BoxUtils(configFile);
+                var lister = new BoxUtils(configFile, asUser);
                 await lister.ItemIdByPath(path);
             },
-            configOption, pathOption
+            configOption, pathOption, asUserOption
         );
 
         var uploadCommand = new Command("upload", "Upload a file to a folder");
@@ -252,19 +301,44 @@ class Program
         uploadCommand.AddOption(folderIdOption);
         uploadCommand.AddOption(filePathOption);
         uploadCommand.SetHandler(
-            async (string configFile, string folderId, string filePath) =>
+            async (string configFile, string folderId, string filePath, string asUser) =>
             {
-                var lister = new BoxUtils(configFile);
+                var lister = new BoxUtils(configFile, asUser);
                 await lister.UploadFile(folderId, filePath);
             },
-            configOption, folderIdOption, filePathOption
+            configOption, folderIdOption, filePathOption, asUserOption
+        );
+
+        var addMetadataCommand = new Command("add-metadata", "Add metadata to an item");
+        addMetadataCommand.AddOption(idOption);
+        addMetadataCommand.SetHandler(
+            async (string configFile, string asUser, string id) =>
+            {
+                var lister = new BoxUtils(configFile, asUser);
+                await lister.ApplyMatadataToItem(id);
+            },
+            configOption, asUserOption, idOption
+        );
+
+        var deleteFleCommand = new Command("delete-file", "Delete a file");
+        deleteFleCommand.AddOption(idOption);
+        deleteFleCommand.SetHandler(
+            async (string configFile, string asUser, string id) =>
+            {
+                var lister = new BoxUtils(configFile, asUser);
+                await lister.DeleteFile(id);
+            },
+            configOption, asUserOption, idOption
         );
 
         var rootCommand = new RootCommand("Box Folder Lister Tool");
         rootCommand.AddOption(configOption);
+        rootCommand.AddOption(asUserOption);
         rootCommand.AddCommand(itemsCommand);
         rootCommand.AddCommand(getItemForPathCommand);
         rootCommand.AddCommand(uploadCommand);
+        rootCommand.AddCommand(addMetadataCommand);
+        rootCommand.AddCommand(deleteFleCommand);
 
         return await rootCommand.InvokeAsync(args);
     }
