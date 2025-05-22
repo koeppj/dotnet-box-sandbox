@@ -1,5 +1,6 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using System.CommandLine;
+using BoxLib;
 
 class Program
 {
@@ -42,8 +43,16 @@ class Program
         getItemForPathCommand.SetHandler(
             async (string configFile, string path, string asUser) =>
             {
-                var lister = new BoxUtils(configFile, asUser);
-                await lister.ItemIdByPath(path);
+                try
+                {
+                    var lister = new BoxUtils(configFile, asUser);
+                    var item = await lister.ItemByPathAsync(path);`
+                    Console.WriteLine($"{item.Type} called '{item.Name}' with ID {item.Id}");
+                }
+                catch (BoxException ex)
+                {
+                    Console.WriteLine($"Error getting item for path: {ex.Message}");
+                }
             },
             configOption, pathOption, asUserOption
         );
@@ -64,8 +73,16 @@ class Program
         uploadCommand.SetHandler(
             async (string configFile, string folderId, string filePath, string asUser) =>
             {
-                var lister = new BoxUtils(configFile, asUser);
-                await lister.UploadFile(folderId, filePath);
+                try
+                {
+                    var lister = new BoxUtils(configFile, asUser);
+                    var msg = await lister.UploadFile(folderId, filePath);
+                    Console.WriteLine(msg);
+                }
+                catch (BoxException ex)
+                {
+                    Console.WriteLine($"Error uploading file: {ex.Message}");
+                }
             },
             configOption, folderIdOption, filePathOption, asUserOption
         );
@@ -87,7 +104,15 @@ class Program
             async (string configFile, string asUser, string id) =>
             {
                 var lister = new BoxUtils(configFile, asUser);
-                await lister.DeleteFile(id);
+                try
+                {
+                    var msg = await lister.DeleteFile(id);
+                    Console.WriteLine(msg);
+                }
+                catch (BoxException ex)
+                {
+                    Console.WriteLine($"Error deleting file: {ex.Message}");
+                }
             },
             configOption, asUserOption, idOption
         );
