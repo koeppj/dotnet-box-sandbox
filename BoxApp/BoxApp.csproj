@@ -20,4 +20,8 @@
     <PublishReadyToRunExclude Include="bcpkix-fips-1.0.2.dll" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\BoxLib\BoxLib.csproj" />
+  </ItemGroup>
+
 </Project>
