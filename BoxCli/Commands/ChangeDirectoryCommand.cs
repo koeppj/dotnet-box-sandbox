@@ -1,33 +1,57 @@
 using BoxLib;
+using Spectre.Console;
 
 namespace BoxCli.Commands
 {
     class ChangeDirectoryCommand : Command
     {
+        private Stack<string> folderPath;
+
         public ChangeDirectoryCommand(
             Func<string> getCurrentFolderId,
             Action<string> setCurrentFolderId,
             BoxUtils boxUtils,
-            List<BoxItem> folderItems)
-            : base(getCurrentFolderId, setCurrentFolderId, boxUtils, folderItems) { }
-
-        public override async Task Execute(string argument)
+            BoxItemFetcher boxItemFetcher,
+            Stack<string> folderPath)
+            : base(getCurrentFolderId, setCurrentFolderId, boxUtils, boxItemFetcher)
         {
-            if (string.IsNullOrWhiteSpace(argument))
+            this.folderPath = folderPath;
+        }
+
+        public override async Task Execute(string[] args)
+        {
+            if (args.Length < 1 || string.IsNullOrWhiteSpace(args[0]))
             {
-                Console.WriteLine("Usage: cd <folderId>");
+                Console.WriteLine("Usage: cd <folderId|..|path>");
                 return;
             }
-            // Optionally: check if folder exists
-            try
+
+            var path = args[0].Split('/', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in path)
             {
-                // You may want to validate the folder exists here
-                SetCurrentFolderId(argument);
+                if (part == "..")
+                {
+                    if (folderPath.Count > 1)
+                        folderPath.Pop();
+                }
+                else if (part == ".")
+                {
+                    // Stay in current directory
+                }
+                else
+                {
+                    var itemId = boxItemFetcher.GetItemIdByName(part);
+                    if (itemId == null)
+                    {
+                        AnsiConsole.WriteLine($"Folder '{part}' not found.");
+                        return;
+                    }
+                    await boxItemFetcher.PopulateItemsAsync(itemId);
+                    folderPath.Push(itemId);
+                }
             }
-            catch
-            {
-                Console.WriteLine("Folder not found.");
-            }
+            // Ensure items are loaded for the final folder
+            await boxItemFetcher.PopulateItemsAsync(folderPath.Peek());
         }
     }
 }

@@ -8,15 +8,15 @@ namespace BoxCli.Commands
             Func<string> getCurrentFolderId,
             Action<string> setCurrentFolderId,
             BoxUtils boxUtils,
-            List<BoxItem> folderItems)
-            : base(getCurrentFolderId, setCurrentFolderId, boxUtils, folderItems) { }
+            BoxItemFetcher boxItemFetcher)
+            : base(getCurrentFolderId, setCurrentFolderId, boxUtils, boxItemFetcher) { }
 
-        public override async Task Execute(string argument)
+        public override Task Execute(string[] args)
         {
             try
             {
-                var items = await BoxUtils.ListFolderItemsAsync(GetCurrentFolderId());
-                foreach (var item in items.Items)
+                var items = boxItemFetcher.GetItemsSnapshot();
+                foreach (var item in items)
                 {
                     Console.WriteLine($"{item.Type}\t{item.Id}\t{item.Name}");
                 }
@@ -25,6 +25,7 @@ namespace BoxCli.Commands
             {
                 Console.WriteLine($"Error listing folder: {ex.Message}");
             }
+            return Task.CompletedTask;
         }
     }
 }

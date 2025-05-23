@@ -6,21 +6,22 @@ namespace BoxCli.Commands
     {
         protected Func<string> GetCurrentFolderId;
         protected Action<string> SetCurrentFolderId;
-        protected BoxUtils BoxUtils;
-        protected List<BoxItem> FolderItems;
+        protected BoxUtils boxUtils;
+        protected BoxItemFetcher boxItemFetcher;
 
         protected Command(
             Func<string> getCurrentFolderId,
             Action<string> setCurrentFolderId,
             BoxUtils boxUtils,
-            List<BoxItem> folderItems)
+            BoxItemFetcher boxItemFetcher)
         {
             GetCurrentFolderId = getCurrentFolderId;
             SetCurrentFolderId = setCurrentFolderId;
-            BoxUtils = boxUtils;
-            FolderItems = folderItems;
+            this.boxUtils = boxUtils;
+            this.boxItemFetcher = boxItemFetcher;
         }
 
-        public abstract Task Execute(string argument);
+        public abstract Task Execute(string[] args);
+
     }
 }

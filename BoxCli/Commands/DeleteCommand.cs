@@ -8,30 +8,40 @@ namespace BoxCli.Commands
             Func<string> getCurrentFolderId,
             Action<string> setCurrentFolderId,
             BoxUtils boxUtils,
-            List<BoxItem> folderItems)
-            : base(getCurrentFolderId, setCurrentFolderId, boxUtils, folderItems) { }
+            BoxItemFetcher boxItemFetcher)
+            : base(getCurrentFolderId, setCurrentFolderId, boxUtils, boxItemFetcher) { }
 
-        public override async Task Execute(string argument)
+        public override async Task Execute(string[] args)
         {
-            if (string.IsNullOrWhiteSpace(argument))
+            if (args.Length < 1 || string.IsNullOrWhiteSpace(args[0]))
             {
                 Console.WriteLine("Usage: del <fileOrFolderId>");
                 return;
             }
             try
             {
-                // Try delete as file, if fails try as folder
-                Console.WriteLine("File deleted.");
+                var itemId = boxItemFetcher.GetItemIdByName(args[0]);
+                if (itemId == null)
+                {
+                    Console.WriteLine($"Item '{args[0]}' not found.");
+                    return;
+                }
+                await boxUtils.DeleteFile(itemId);
+                Console.WriteLine($"Item '{args[0]}' deleted successfully.");
             }
-            catch
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error deleting item: {ex.Message}");
+            }
+            finally
             {
                 try
                 {
-                    Console.WriteLine("Folder deleted.");
+                    await boxItemFetcher.PopulateItemsAsync(GetCurrentFolderId());
                 }
-                catch
+                catch (Exception ex)
                 {
-                    Console.WriteLine("Could not delete item.");
+                    Console.WriteLine($"Error refreshing items: {ex.Message}");
                 }
             }
         }

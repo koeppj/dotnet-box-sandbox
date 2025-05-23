@@ -1,13 +1,15 @@
 ﻿using BoxLib;
 using BoxCli.Commands;
+using Spectre.Console;
 
 namespace BoxCli
 {
     class Program
     {
-        static string currentFolderId = "0";
+        static Stack<string> folderPath = new Stack<string>(new[] { "0" }); // "0" is root
         static BoxUtils? boxUtils;
-        static List<BoxItem> folderItems = new List<BoxItem>();
+        static BoxItemFetcher? boxItemFetcher;
+        static TypeaheadCommandReader? typeaheadReader; // Add this
 
         static async Task Main(string[] args)
         {
@@ -15,27 +17,30 @@ namespace BoxCli
 
             Authenticate(args);
 
+            if (boxUtils == null || boxItemFetcher == null)
+            {
+                Console.WriteLine("Authentication failed. Exiting.");
+                Environment.Exit(1);
+            }
+
+            typeaheadReader = new TypeaheadCommandReader(boxItemFetcher); // Initialize
+
             var commands = new Dictionary<string, Command>(StringComparer.OrdinalIgnoreCase)
             {
-                { "ls", new ListCommand(() => currentFolderId, id => currentFolderId = id, boxUtils, folderItems) },
-                { "cd", new ChangeDirectoryCommand(() => currentFolderId, id => currentFolderId = id, boxUtils, folderItems) },
-                { "del", new DeleteCommand(() => currentFolderId, id => currentFolderId = id, boxUtils, folderItems) }
-                // Add more commands as needed
+                { "ls", new ListCommand(GetCurrentFolderId, SetCurrentFolderId, boxUtils, boxItemFetcher) },
+                { "cd", new ChangeDirectoryCommand(GetCurrentFolderId, SetCurrentFolderId, boxUtils, boxItemFetcher, folderPath) },
+                { "del", new DeleteCommand(GetCurrentFolderId, SetCurrentFolderId, boxUtils, boxItemFetcher) }
             };
 
             while (true)
             {
-                Console.Write($"Box:{currentFolderId}> ");
-                var input = Console.ReadLine();
-                if (input == null)
-                    continue;
-                var parts = input.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-
+                AnsiConsole.Markup($"[blue bold]Box:{string.Join("/", folderPath.Reverse())}> [/]");
+                var parts = await typeaheadReader.ReadCommandAsync(); // Use the new class
                 if (parts.Length == 0)
                     continue;
 
                 var command = parts[0].ToLower();
-                var argument = parts.Length > 1 ? parts[1] : "";
+                var arguments = parts.Skip(1).ToArray();
 
                 if (command == "exit")
                     return;
@@ -47,7 +52,7 @@ namespace BoxCli
 
                 if (commands.TryGetValue(command, out var handler))
                 {
-                    await handler.Execute(argument);
+                    await handler.Execute(arguments);
                 }
                 else
                 {
@@ -56,16 +61,24 @@ namespace BoxCli
             }
         }
 
+        static string GetCurrentFolderId() => folderPath.Peek();
+        static void SetCurrentFolderId(string id)
+        {
+            folderPath.Push(id);
+        }
+
         static void Authenticate(string[] args)
         {
             if (args.Length < 1)
             {
-                Console.WriteLine("Usage: BoxCli <clientId> <clientSecret>");
+                AnsiConsole.MarkupLine("[bold] Usage: BoxCli <clientId> <clientSecret>[/]");
                 Environment.Exit(1);
             }
             string configFile = args[0];
             string? asUser = args.Length > 1 ? args[1] : null;
             boxUtils = new BoxUtils(configFile, asUser);
+            boxItemFetcher = new BoxItemFetcher(boxUtils);
+            boxItemFetcher.PopulateItemsAsync(GetCurrentFolderId()).Wait();
         }
 
         static void PrintHelp()
