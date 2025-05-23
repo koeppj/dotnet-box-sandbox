@@ -4,6 +4,17 @@ using Box.Sdk.Gen.Managers;
 
 namespace BoxLib
 {
+    public class ListFolderItemsReturn
+    {
+        public ListFolderItemsReturn(List<BoxItem> Items, string? NextMarker)
+        {
+            this.Items = Items;
+            this.NextMarker = NextMarker;
+        }
+
+        public List<BoxItem> Items { get; set; } = new List<BoxItem>();
+        public string? NextMarker { get; set; }
+    }
     public class BoxUtils
     {
         private readonly BoxClient _client;
@@ -40,29 +51,33 @@ namespace BoxLib
         // (see https://developer.box.com/reference/get-folders-id-items/).
         // </description>
         // <param name="folderId">The ID of the folder to list items from.</param>
-        public async Task<List<BoxItem>> ListFolderItemsAsync(string folderId)
+        public async Task<ListFolderItemsReturn> ListFolderItemsAsync(string folderId, string? nextMarker = null)
         {
-            GetFolderByIdHeaders _apiHeaders = new GetFolderByIdHeaders();
-            var folder = await _client.Folders.GetFolderItemsAsync(folderId);
+            GetFolderItemsQueryParams queryParams = new GetFolderItemsQueryParams
+            {
+                Limit = 1000,
+                Usemarker = true,
+                Marker = !string.IsNullOrEmpty(nextMarker) ? nextMarker : null
+            };
+            var folder = await _client.Folders.GetFolderItemsAsync(folderId, queryParams);
             var result = new List<BoxItem>();
             if (folder.Entries != null)
             {
-                if (folder.Entries.Count == 0)
-                {
-                    Console.WriteLine($"Folder {folderId} is empty.");
-                    return new List<BoxItem>();
-                }
                 foreach (var item in folder.Entries)
                 {
-                    Console.WriteLine($"{GetItemType(item)} called '{GetNameFromItem(item)}' with ID {GetIdFromItem(item)}");
                     result.Add(new BoxItem(item));
                 }
-                return result;
+                return new ListFolderItemsReturn(
+                    Items: result,
+                    NextMarker: folder.NextMarker
+                );
             }
             else
             {
-                Console.WriteLine($"No entries found in folder {folderId}.");
-                return new List<BoxItem>();
+                return new ListFolderItemsReturn(
+                    Items: result,
+                    NextMarker: null
+                );
             }
         }
 
@@ -109,7 +124,7 @@ namespace BoxLib
             else
             {
                 throw new BoxException($"Item '{path}' not found.");
-            }   
+            }
         }
 
         /// <summary>

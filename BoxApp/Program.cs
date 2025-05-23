@@ -27,8 +27,35 @@ class Program
         itemsCommand.SetHandler(
             async (string configFile, string id, string asUser) =>
             {
-                var lister = new BoxUtils(configFile, asUser);
-                await lister.ListFolderItemsAsync(id);
+                try 
+                {
+                    var utils = new BoxUtils(configFile, asUser);
+                    var items = await utils.ListFolderItemsAsync(id);
+                    var done = false;
+                    // Loop through all items in the folder
+                    // and print their details.
+                    // If there are more items, get the next page
+                    // and repeat    
+                    while (!done)
+                    {
+                        foreach (var item in items.Items)
+                        {
+                            Console.WriteLine($"{item.Type} called '{item.Name}' with ID {item.Id}");
+                        }
+                        if (items.NextMarker == null)
+                        {
+                            done = true;
+                        }
+                        else
+                        {
+                            items = await utils.ListFolderItemsAsync(id, items.NextMarker);
+                        }
+                    }
+                }
+                catch (BoxException ex)
+                {
+                    Console.WriteLine($"Error listing items: {ex.Message}");
+                }
             },
             configOption, idOption, asUserOption
         );
@@ -46,7 +73,7 @@ class Program
                 try
                 {
                     var lister = new BoxUtils(configFile, asUser);
-                    var item = await lister.ItemByPathAsync(path);`
+                    var item = await lister.ItemByPathAsync(path);
                     Console.WriteLine($"{item.Type} called '{item.Name}' with ID {item.Id}");
                 }
                 catch (BoxException ex)
