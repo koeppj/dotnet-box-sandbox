@@ -2,11 +2,18 @@ using Box.Sdk.Gen.Schemas;
 
 namespace BoxLib
 {
+    public enum BoxItemType
+    {
+        File,
+        Folder,
+        WebLink
+    }
+
     public class BoxItem
     {
         public string Id { get; }
         public string Name { get; }
-        public string Type { get; } // "file", "folder", or "web_link"
+        public BoxItemType Type { get; } // Use enum now
 
         public BoxItem(FileFullOrFolderMiniOrWebLink item)
         {
@@ -14,19 +21,19 @@ namespace BoxLib
             {
                 Id = item.FolderMini.Id;
                 Name = item.FolderMini.Name ?? "";
-                Type = "folder";
+                Type = BoxItemType.Folder;
             }
             else if (item.FileFull != null)
             {
                 Id = item.FileFull.Id;
                 Name = item.FileFull.Name ?? "";
-                Type = "file";
+                Type = BoxItemType.File;
             }
             else if (item.WebLink != null)
             {
                 Id = item.WebLink.Id;
                 Name = item.WebLink.Name ?? "";
-                Type = "web_link";
+                Type = BoxItemType.WebLink;
             }
             else
             {
@@ -38,7 +45,7 @@ namespace BoxLib
         {
             Id = item.Id;
             Name = item.Name ?? "";
-            Type = "file";
+            Type = BoxItemType.File;
         }
     }
 }

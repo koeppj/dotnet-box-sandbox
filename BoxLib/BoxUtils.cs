@@ -43,6 +43,25 @@ namespace BoxLib
             }
         }
 
+        public BoxUtils()
+        {
+            var appConfig = BoxCliConfig.GetClientAppConfigAsString();
+            if (string.IsNullOrEmpty(appConfig))
+            {
+                throw new ArgumentException("Invalid config file path.", nameof(appConfig));
+            }
+            var client = new BoxClient(new BoxJwtAuth(JwtConfig.FromConfigJsonString(appConfig)));
+            var asUserId = BoxCliConfig.GetAsUser();
+            if (!string.IsNullOrEmpty(asUserId))
+            {
+                _client = client.WithAsUserHeader(asUserId);
+            }
+            else
+            {
+                _client = client;
+            }
+        }
+
         // <summary>
         // Lists items in a specified folder.
         // </summary>
@@ -214,6 +233,92 @@ namespace BoxLib
             return null;
         }
 
+        public async Task<string> GetItemInfoNByIdAsync(string itemId)
+        {
+            var itemString = string.Empty;
+            itemString = await GetFilenfoByIdAsync(itemId);
+            if (string.IsNullOrEmpty(itemString))
+            {
+                itemString = await GetFolderInfoByIdAsync(itemId);
+                if (string.IsNullOrEmpty(itemString))
+                {
+                    itemString = await GetWebLinkInfoByIdAsync(itemId);
+                    if (string.IsNullOrEmpty(itemString))
+                    {
+                        return String.Empty;
+                    }
+                }
+                return itemString;
+            }
+            else
+            {
+                return itemString;
+            }
+        }
+
+        private async Task<string> GetFilenfoByIdAsync(string itemId)
+        {
+            try
+            {
+                var item = await _client.Files.GetFileByIdAsync(itemId);
+                var raw = item.GetRawData();
+                return System.Text.Json.JsonSerializer.Serialize(raw, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            }
+            catch (BoxApiException ex)
+            {
+                if (ex.ResponseInfo.StatusCode == 404)
+                {
+                    return String.Empty;
+                }
+                else
+                {
+                    throw;
+                }
+            }
+        }
+
+        private async Task<string> GetFolderInfoByIdAsync(string itemId)
+        {
+            try
+            {
+                var item = await _client.Folders.GetFolderByIdAsync(itemId);
+                var raw = item.GetRawData();
+                return System.Text.Json.JsonSerializer.Serialize(raw, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            }
+            catch (BoxApiException ex)
+            {
+                if (ex.ResponseInfo.StatusCode == 404)
+                {
+                    return String.Empty;
+                }
+                else
+                {
+                    throw;
+                }
+            }
+        }
+
+        private async Task<string> GetWebLinkInfoByIdAsync(string itemId)
+        {
+            try
+            {
+                var item = await _client.WebLinks.GetWebLinkByIdAsync(itemId);
+                var raw = item.GetRawData();
+                return System.Text.Json.JsonSerializer.Serialize(raw, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            }
+            catch (BoxApiException ex)
+            {
+                if (ex.ResponseInfo.StatusCode == 404)
+                {
+                    return String.Empty;
+                }
+                else
+                {
+                    throw;
+                }
+            }
+        }
+
         private static string GetIdFromItem(
             Box.Sdk.Gen.Schemas.FileFullOrFolderMiniOrWebLink item)
         {
@@ -232,40 +337,5 @@ namespace BoxLib
             throw new InvalidOperationException("Unknown item type");
         }
 
-        private static string GetItemType(
-            Box.Sdk.Gen.Schemas.FileFullOrFolderMiniOrWebLink item)
-        {
-            if (item.FolderMini != null)
-            {
-                return "Folder";
-            }
-            else if (item.FileFull != null)
-            {
-                return "File";
-            }
-            else if (item.WebLink != null)
-            {
-                return "Web Link";
-            }
-            throw new InvalidOperationException("Unknown item type");
-        }
-
-        private static string GetNameFromItem(
-            Box.Sdk.Gen.Schemas.FileFullOrFolderMiniOrWebLink item)
-        {
-            if (item.FolderMini != null)
-            {
-                return item.FolderMini.Name ?? "FolderMini.Name is null";
-            }
-            else if (item.FileFull != null)
-            {
-                return item.FileFull.Name ?? "FileFull.Name is null";
-            }
-            else if (item.WebLink != null)
-            {
-                return item.WebLink.Name ?? "WebLink.Name is null";
-            }
-            throw new InvalidOperationException("Unknown item type");
-        }
-    }
+   }
 }

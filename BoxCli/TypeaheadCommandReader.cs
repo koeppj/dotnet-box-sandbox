@@ -52,6 +52,22 @@ namespace BoxCli
                             buffer.RemoveAt(buffer.Count - 1);
                             Console.Write("\b \b");
                         }
+                        else if (words.Count > 0)
+                        {
+                            // Remove the last word and put it back into the buffer
+                            string lastWord = words[words.Count - 1];
+                            words.RemoveAt(words.Count - 1);
+                            // Erase the space and the word from the console
+                            for (int i = 0; i < lastWord.Length + 1; i++)
+                            {
+                                Console.Write("\b \b");
+                            }
+                            foreach (char c in lastWord)
+                            {
+                                buffer.Add(c);
+                            }
+                            isFirstWord = words.Count == 0;
+                        }
                     }
                     else
                     {

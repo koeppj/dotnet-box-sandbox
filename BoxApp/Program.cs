@@ -1,5 +1,6 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using System.CommandLine;
+using System.Xml.Schema;
 using BoxLib;
 
 class Program
@@ -40,7 +41,7 @@ class Program
                     {
                         foreach (var item in items.Items)
                         {
-                            Console.WriteLine($"{item.Type} called '{item.Name}' with ID {item.Id}");
+                            Console.WriteLine($"{item.Type.ToString().ToLower()} called '{item.Name}' with ID {item.Id}");
                         }
                         if (items.NextMarker == null)
                         {
@@ -144,6 +145,30 @@ class Program
             configOption, asUserOption, idOption
         );
 
+        var itemInfoCommand = new Command("item-info", "Get information about an item");
+        itemInfoCommand.AddOption(idOption);
+        itemInfoCommand.SetHandler(
+            async (string configFile, string asUser, string id) =>
+            {
+                var lister = new BoxUtils(configFile, asUser);
+                try
+                {
+                    var item = await lister.GetItemInfoNByIdAsync(id);
+                    if (item == String.Empty)
+                    {
+                        Console.WriteLine($"Item with ID {id} not found.");
+                        return;
+                    }
+                    Console.WriteLine(item);
+                }
+                catch (BoxException ex)
+                {
+                    Console.WriteLine($"Error getting item info: {ex.Message}");
+                }
+            },
+            configOption, asUserOption, idOption
+        );
+
         var rootCommand = new RootCommand("Box Folder Lister Tool");
         rootCommand.AddOption(configOption);
         rootCommand.AddOption(asUserOption);
@@ -152,6 +177,8 @@ class Program
         rootCommand.AddCommand(uploadCommand);
         rootCommand.AddCommand(addMetadataCommand);
         rootCommand.AddCommand(deleteFleCommand);
+        rootCommand.AddCommand(itemInfoCommand);
+        rootCommand.Description = "A command line tool for Box folder operations.";
 
         return await rootCommand.InvokeAsync(args);
     }
