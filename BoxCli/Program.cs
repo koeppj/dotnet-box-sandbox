@@ -38,7 +38,7 @@ namespace BoxCli
             var clientTypeOption = new Option<BoxClientType>(
                 ["--client-type", "-t"],
                 description: "Client type (Jwt, ClientCredentials, OAuth).");
-            setCientConfigCommand.SetHandler((string config, BoxClientType clientType) =>
+            setCientConfigCommand.SetHandler((config, clientType) =>
             {
                 // Logic to save client configuration
                 BoxCliConfig.SetClientAppConfig(config, clientType);

@@ -69,7 +69,7 @@ namespace BoxLib
             System.IO.File.WriteAllText(configFilePath, json);
         }
 
-        public static void SetClientAppConfig(string profileName, BoxClientType clientType)
+        public static void SetClientAppConfig(string appConfigFileName, BoxClientType clientType, string? profileName = null )
         {
             var configFilePath = GetConfigFilePath(profileName);
 
@@ -83,7 +83,7 @@ namespace BoxLib
             Dictionary<string, object>? clientConfig = null;
             try
             {
-                string json = System.IO.File.ReadAllText(configFilePath);
+                string json = System.IO.File.ReadAllText(appConfigFileName);
                 clientConfig = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
             }
             catch (JsonException ex)
@@ -123,6 +123,7 @@ namespace BoxLib
 
             // Update (or create) the config object with the new client type and config
             config.ClientConfig = clientConfig;
+            config.ClientType = clientType;
             try
             {
                 WriteBoxClientConfig(config, configFilePath);
