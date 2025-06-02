@@ -37,8 +37,8 @@ namespace BoxCli
         {
             terminalCommand.AddCommand(HelpCommand());
             terminalCommand.AddCommand(ExitCommand());
-            terminalCommand.AddCommand(ChangeDirectoryCommand.CreateCommand(GetCurrentFolderId, SetCurrentFolderId, boxUtils, boxItemFetcher, folderPath));
-            terminalCommand.AddCommand(DeleteCommand.CreateCommand(GetCurrentFolderId, SetCurrentFolderId, boxUtils, boxItemFetcher));
+            terminalCommand.AddCommand(ChangeDirectory());
+            terminalCommand.AddCommand(DeleteCommand());
             terminalCommand.AddCommand(ListCommand());
 
             while (continueExecution)

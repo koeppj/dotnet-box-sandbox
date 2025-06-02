@@ -1,36 +1,13 @@
-using Box.Sdk.Gen.Managers;
 using BoxLib;
 using Spectre.Console;
 using System.CommandLine;
 
-namespace BoxCli.Commands
+namespace BoxCli
 {
-    class ChangeDirectoryCommand : Command
+    partial class Program
     {
-        private Stack<string> folderPath;
 
-        public ChangeDirectoryCommand(
-            Func<string> getCurrentFolderId,
-            Action<string> setCurrentFolderId,
-            BoxUtils boxUtils,
-            BoxItemFetcher boxItemFetcher,
-            Stack<string> folderPath)
-            : base(getCurrentFolderId, setCurrentFolderId, boxUtils, boxItemFetcher)
-        {
-            this.folderPath = folderPath;
-        }
-
-        public override async Task Execute(string[] args)
-        {
-            if (args.Length < 1 || string.IsNullOrWhiteSpace(args[0]))
-            {
-                Console.WriteLine("Usage: cd <folderId|..|path>");
-                return;
-            }
-            await DoWOrk(args[0]);
-        }
-
-        public async Task DoWOrk(string path)
+        public async Task DoChangeDirectory(string path)
         {
             var pathParts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
             foreach (var part in pathParts)
@@ -60,30 +37,19 @@ namespace BoxCli.Commands
             await boxItemFetcher.PopulateItemsAsync(folderPath.Peek());
         }
 
-        public static System.CommandLine.Command CreateCommand(
-            Func<string> getCurrentFolderId,
-            Action<string> setCurrentFolderId,
-            BoxUtils boxUtils,
-            BoxItemFetcher boxItemFetcher,
-            Stack<string> folderPath)
+        private Command ChangeDirectory()
         {
             var folderNameArg = new Argument<string>("folderId", "The ID of the folder to change to or '..' to go up one level.")
             {
                 Arity = ArgumentArity.ExactlyOne
             };
-            var command = new System.CommandLine.Command("cd", "Change the current working directory in Box.")
+            var command = new Command("cd", "Change the current working directory in Box.")
             {
                 folderNameArg
             };
             command.SetHandler(async (path) =>
             {
-                var changeDirectoryCommand = new ChangeDirectoryCommand(
-                    getCurrentFolderId,
-                    setCurrentFolderId,
-                    boxUtils,
-                    boxItemFetcher,
-                    folderPath);
-                await changeDirectoryCommand.DoWOrk(path);
+                await DoChangeDirectory(path);
             }, folderNameArg);
             return command;
         }

@@ -1,29 +1,11 @@
 using System.CommandLine;
 using BoxLib;
 
-namespace BoxCli.Commands
+namespace BoxCli
 {
-    class DeleteCommand : Command
+    partial class Program
     {
-        public DeleteCommand(
-            Func<string> getCurrentFolderId,
-            Action<string> setCurrentFolderId,
-            BoxUtils boxUtils,
-            BoxItemFetcher boxItemFetcher)
-            : base(getCurrentFolderId, setCurrentFolderId, boxUtils, boxItemFetcher) { }
-
-        public override async Task Execute(string[] args)
-        {
-            if (args.Length < 1 || string.IsNullOrWhiteSpace(args[0]))
-            {
-                Console.WriteLine("Usage: del <fileOrFolderId>");
-                return;
-            }
-
-            await DoWork(args[0]);
-        }
-
-        public async Task DoWork(string itemId)
+        public async Task DoDelete(string itemId)
         {
             try
             {
@@ -47,11 +29,7 @@ namespace BoxCli.Commands
             }
         }
 
-        public static System.CommandLine.Command CreateCommand(
-            Func<string> getCurrentFolderId,
-            Action<string> setCurrentFolderId,
-            BoxUtils boxUtils,
-            BoxItemFetcher boxItemFetcher)
+        private Command DeleteCommand()
         {
             var itemArg = new System.CommandLine.Argument<string>("itemId", "ID of the file or folder to delete")
             {
@@ -63,8 +41,7 @@ namespace BoxCli.Commands
             };
             command.SetHandler(async (item) =>
             {
-                var cmd = new DeleteCommand(getCurrentFolderId, setCurrentFolderId, boxUtils, boxItemFetcher);
-                await cmd.DoWork(item);
+                await DoDelete(item);
             }, itemArg);
             return command; 
         }
