@@ -20,18 +20,14 @@ namespace BoxLib
         private readonly BoxClient _client;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="BoxUtils"/> class using the specified Box JWT configuration file.
+        /// Initializes a new instance of the <see cref="BoxUtils"/> class using the specified Box profile.
         /// </summary>
-        /// <param name="configFile">Path to the Box JWT config JSON file.</param>
-        public BoxUtils(string configFile, string? asUserId = null)
+        /// <param name="profile">The Box profile name to use for authentication.</param>
+        public BoxUtils(string? profile = null, string? asUserId = null)
         {
-            // Validate the config file path
-            if (string.IsNullOrEmpty(configFile) || !System.IO.File.Exists(configFile))
-            {
-                throw new ArgumentException("Invalid config file path.", nameof(configFile));
-            }
-            // Initialize the Box client using JWT authentication
-            var auth = new BoxJwtAuth(JwtConfig.FromConfigFile(configFile));
+            // Load the config file path from the profile
+            var configFile = BoxCliConfig.GetClientAppConfigAsString(profile);
+            var auth = new BoxJwtAuth(JwtConfig.FromConfigJsonString(configFile));
             var client = new BoxClient(auth);
             if (!string.IsNullOrEmpty(asUserId))
             {
@@ -48,7 +44,7 @@ namespace BoxLib
             var appConfig = BoxCliConfig.GetClientAppConfigAsString();
             if (string.IsNullOrEmpty(appConfig))
             {
-                throw new ArgumentException("Invalid config file path.", nameof(appConfig));
+                throw new BoxException($"Not configured properly. Please run 'box config set-client-config' first.");
             }
             var client = new BoxClient(new BoxJwtAuth(JwtConfig.FromConfigJsonString(appConfig)));
             var asUserId = BoxCliConfig.GetAsUser();

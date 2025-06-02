@@ -1,5 +1,7 @@
+using Box.Sdk.Gen.Managers;
 using BoxLib;
 using Spectre.Console;
+using System.CommandLine;
 
 namespace BoxCli.Commands
 {
@@ -25,9 +27,13 @@ namespace BoxCli.Commands
                 Console.WriteLine("Usage: cd <folderId|..|path>");
                 return;
             }
+            await DoWOrk(args[0]);
+        }
 
-            var path = args[0].Split('/', StringSplitOptions.RemoveEmptyEntries);
-            foreach (var part in path)
+        public async Task DoWOrk(string path)
+        {
+            var pathParts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in pathParts)
             {
                 if (part == "..")
                 {
@@ -52,6 +58,34 @@ namespace BoxCli.Commands
             }
             // Ensure items are loaded for the final folder
             await boxItemFetcher.PopulateItemsAsync(folderPath.Peek());
+        }
+
+        public static System.CommandLine.Command CreateCommand(
+            Func<string> getCurrentFolderId,
+            Action<string> setCurrentFolderId,
+            BoxUtils boxUtils,
+            BoxItemFetcher boxItemFetcher,
+            Stack<string> folderPath)
+        {
+            var folderNameArg = new Argument<string>("folderId", "The ID of the folder to change to or '..' to go up one level.")
+            {
+                Arity = ArgumentArity.ExactlyOne
+            };
+            var command = new System.CommandLine.Command("cd", "Change the current working directory in Box.")
+            {
+                folderNameArg
+            };
+            command.SetHandler(async (path) =>
+            {
+                var changeDirectoryCommand = new ChangeDirectoryCommand(
+                    getCurrentFolderId,
+                    setCurrentFolderId,
+                    boxUtils,
+                    boxItemFetcher,
+                    folderPath);
+                await changeDirectoryCommand.DoWOrk(path);
+            }, folderNameArg);
+            return command;
         }
     }
 }

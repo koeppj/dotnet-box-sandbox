@@ -3,138 +3,115 @@ using BoxCli.Commands;
 using Spectre.Console;
 using Spectre.Console.Extensions;
 using System.CommandLine;
-using Box.Sdk.Gen.Managers;
+using System.Net;
+using System.Text.RegularExpressions;
 
 namespace BoxCli
 {
-    class Program
+    partial class Program
     {
-        static Stack<string> folderPath = new Stack<string>(new[] { "0" }); // "0" is root
-        static BoxUtils? boxUtils;
-        static BoxItemFetcher? boxItemFetcher;
-        static TypeaheadCommandReader? typeaheadReader; // Add this
+        // Instance fields
+        private Stack<string> folderPath;
+        private BoxUtils boxUtils;
+        private BoxItemFetcher boxItemFetcher;
+        private TypeaheadCommandReader typeaheadReader;
+        private System.CommandLine.Command terminalCommand;
+        private bool continueExecution;
+
+        public Program(string? profile, string? asUser)
+        {
+            folderPath = new Stack<string>(new[] { "0" }); // "0" is root
+            terminalCommand = new System.CommandLine.Command("terminal", "Box terminal command");
+            terminalCommand.SetHandler(() =>
+            {
+                return;
+            });
+            continueExecution = true;
+            boxUtils = new BoxUtils(profile, asUser);
+            boxItemFetcher = new BoxItemFetcher(boxUtils);
+            typeaheadReader = new TypeaheadCommandReader(boxItemFetcher);
+            boxItemFetcher.PopulateItemsAsync(GetCurrentFolderId()).Spinner(Spinner.Known.Dots);
+        }
+
+        public async Task Run()
+        {
+            terminalCommand.AddCommand(HelpCommand());
+            terminalCommand.AddCommand(ExitCommand());
+            terminalCommand.AddCommand(ChangeDirectoryCommand.CreateCommand(GetCurrentFolderId, SetCurrentFolderId, boxUtils, boxItemFetcher, folderPath));
+            terminalCommand.AddCommand(DeleteCommand.CreateCommand(GetCurrentFolderId, SetCurrentFolderId, boxUtils, boxItemFetcher));
+            terminalCommand.AddCommand(ListCommand());
+
+            while (continueExecution)
+            {
+                AnsiConsole.Markup($"[blue bold]Box:{string.Join("/", folderPath.Reverse())}> [/]");
+                var parts = await typeaheadReader.ReadCommandAsync();
+                await terminalCommand.InvokeAsync(parts);
+            }
+        }
+
+        private string GetCurrentFolderId() => folderPath.Peek();
+        private void SetCurrentFolderId(string id)
+        {
+            folderPath.Push(id);
+        }
+
 
         static async Task Main(string[] args)
-        {           
+        {
             // Define command line options
-            var configOption = new Option<string>(
-                ["--config", "-c"],
-                description: "Path to the configuration file.");
+            var profileOption = new Option<string>(
+                ["--profile", "-p"],
+                description: "Box profile name to use for authentication.");
             var asUserOption = new Option<string?>(
                 ["--as-user", "-u"],
                 description: "Make API calls as a user.");
 
             var rootCommand = new RootCommand
             {
-                configOption,
+                profileOption,
                 asUserOption
             };
 
             var setCientConfigCommand = new System.CommandLine.Command("set-client", "Save client configuration");
             var setClientConfigOption = new Option<string>(
-                ["--config", "-c"],
-                description: "Path to the configuration file.")
-                { IsRequired = true };
+                ["--profile", "-p"],
+                description: "Box profile name to use for authentication.")
+            { IsRequired = true };
             var clientTypeOption = new Option<BoxClientType>(
                 ["--client-type", "-t"],
                 description: "Client type (Jwt, ClientCredentials, OAuth).");
-            setCientConfigCommand.SetHandler((config, clientType) =>
+            setCientConfigCommand.SetHandler((profile, clientType) =>
             {
                 // Logic to save client configuration
-                BoxCliConfig.SetClientAppConfig(config, clientType);
-            }, configOption, clientTypeOption);
+                BoxCliConfig.SetClientAppConfig(profile, clientType);
+            }, setClientConfigOption, clientTypeOption);
 
             rootCommand.Description = "Box CLI";
 
-            string? configFile = null;
+            string? profile = null;
             string? asUser = null;
 
-            rootCommand.SetHandler((string config, string? asUserValue) =>
+            rootCommand.SetHandler((string profileValue, string? asUserValue) =>
             {
-                configFile = config;
+                profile = profileValue;
                 asUser = asUserValue;
-            }, configOption, asUserOption);
+            }, profileOption, asUserOption);
             rootCommand.Add(setCientConfigCommand);
 
-            await rootCommand.InvokeAsync(args);
+            var cmd = rootCommand.Parse(args);
 
-            Authenticate(configFile, asUser);
-
-            if (boxUtils == null || boxItemFetcher == null)
+            // Check if a subcommand (other than root) was specified
+            if (cmd.CommandResult.Command != rootCommand)
             {
-                Console.WriteLine("Authentication failed. Exiting.");
-                Environment.Exit(1);
+                // Run the subcommand and exit
+                await rootCommand.InvokeAsync(args);
+                return;
             }
 
-            typeaheadReader = new TypeaheadCommandReader(boxItemFetcher); // Initialize
-
-            var commands = new Dictionary<string, Commands.Command>(StringComparer.OrdinalIgnoreCase)
-            {
-                { "ls", new ListCommand(GetCurrentFolderId, SetCurrentFolderId, boxUtils, boxItemFetcher) },
-                { "cd", new ChangeDirectoryCommand(GetCurrentFolderId, SetCurrentFolderId, boxUtils, boxItemFetcher, folderPath) },
-                { "del", new DeleteCommand(GetCurrentFolderId, SetCurrentFolderId, boxUtils, boxItemFetcher) }
-            };
-
-            while (true)
-            {
-                AnsiConsole.Markup($"[blue bold]Box:{string.Join("/", folderPath.Reverse())}> [/]");
-                var parts = await typeaheadReader.ReadCommandAsync(); // Use the new class
-                if (parts.Length == 0)
-                    continue;
-
-                var command = parts[0].ToLower();
-                var arguments = parts.Skip(1).ToArray();
-
-                if (command == "exit")
-                    return;
-                if (command == "help")
-                {
-                    PrintHelp();
-                    continue;
-                }
-
-                if (commands.TryGetValue(command, out var handler))
-                {
-                    await handler.Execute(arguments);
-                }
-                else
-                {
-                    Console.WriteLine("Unknown command. Type 'help' for options.");
-                }
-            }
-        }
-
-        static string GetCurrentFolderId() => folderPath.Peek();
-        static void SetCurrentFolderId(string id)
-        {
-            folderPath.Push(id);
-        }
-
-        static void Authenticate(string? configFile, string? asUser)
-        {
-            configFile ??= BoxCliConfig.GetConfigFilePath(null);
-            if (!File.Exists(configFile))
-            {
-                AnsiConsole.MarkupLine($"[red]Config file not found: {configFile}[/]");
-                Environment.Exit(1);
-            }
-            boxUtils = new BoxUtils();
-            boxItemFetcher = new BoxItemFetcher(boxUtils);
             AnsiConsole.Markup("[bold] Authenticating...[/]");
-            boxItemFetcher.PopulateItemsAsync(GetCurrentFolderId()).Spinner(Spinner.Known.Dots);
+            var program = new Program(profile, asUser);
             AnsiConsole.MarkupLine("[green] Authentication successful![/]");
-        }
-
-        static void PrintHelp()
-        {
-            Console.WriteLine(@"
-Available commands:
-  ls                  List current directory contents
-  cd <folderId>       Change directory to folderId
-  del <id>            Delete file or folder by id
-  help                Show this help
-  exit                Quit the CLI
-");
+            await program.Run();
         }
     }
 }

@@ -18,20 +18,30 @@ namespace BoxLib
         public Dictionary<string, object>? ClientConfig { get; set; } = null;
     }
 
+    public class BoxUtilsConfig
+    {
+        public string currentProfile { get; set; } = "default";
+        public Dictionary<string, BoxClientConfigObject> Profiles { get; set; } = new Dictionary<string, BoxClientConfigObject>
+        {
+            { "default", new BoxClientConfigObject() }
+        };
+    }
+
     public static class BoxCliConfig
     {
         private static JsonSerializerOptions jsonSerializerOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = true,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
             Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
         };
         private static string defaultFileName = "config.json";
-        public static string GetConfigFilePath(string? profileName = null)
+
+        private static string GetConfigFilePath()
         {
             string configDir = GetConfigDirPath();
-            string configFileName = profileName ?? defaultFileName;
-            return Path.Combine(configDir, configFileName);
+            return Path.Combine(configDir, defaultFileName);
         }
 
         private static string GetConfigDirPath()
@@ -49,42 +59,38 @@ namespace BoxLib
             }
         }
 
-        private static BoxClientConfigObject ReadBoxClientConfig(string? profileName = null)
+        private static BoxUtilsConfig ReadBoxUtilsConfig()
         {
-            var configFilePath = GetConfigFilePath(profileName);
+            var configFilePath = GetConfigFilePath();
             if (!System.IO.File.Exists(configFilePath))
             {
-                throw new FileNotFoundException($"Configuration file not found: {configFilePath}");
+                // If config doesn't exist, return a new default config
+                return new BoxUtilsConfig();
             }
-
             string json = System.IO.File.ReadAllText(configFilePath);
-            return JsonSerializer.Deserialize<BoxClientConfigObject>(json, jsonSerializerOptions)
-                ?? throw new InvalidOperationException("Failed to deserialize BoxClientConfigObject from config file.");
+            return JsonSerializer.Deserialize<BoxUtilsConfig>(json, jsonSerializerOptions)
+                ?? new BoxUtilsConfig();
         }
 
-        private static void WriteBoxClientConfig(BoxClientConfigObject config, string? profileName = null)
+        private static void WriteBoxUtilsConfig(BoxUtilsConfig config)
         {
-            string configFilePath = GetConfigFilePath(profileName);
+            string configFilePath = GetConfigFilePath();
             string json = JsonSerializer.Serialize(config, jsonSerializerOptions);
+            Directory.CreateDirectory(Path.GetDirectoryName(configFilePath)!);
             System.IO.File.WriteAllText(configFilePath, json);
         }
 
-        public static void SetClientAppConfig(string appConfigFileName, BoxClientType clientType, string? profileName = null )
+        public static void SetClientAppConfig(string appConfigFileName, BoxClientType clientType, string? profileName = null)
         {
-            var configFilePath = GetConfigFilePath(profileName);
+            var config = ReadBoxUtilsConfig();
+            string profile = profileName ?? config.currentProfile;
 
-            if (!System.IO.File.Exists(configFilePath))
-            {
-                Console.WriteLine($"Client Configuration file not found: {configFilePath}");
-                return;
-            }
-
-            // Read the config file as a Dictionary<string, object>
+            // Read the app config as a Dictionary<string, object>
             Dictionary<string, object>? clientConfig = null;
             try
             {
-                string json = System.IO.File.ReadAllText(appConfigFileName);
-                clientConfig = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+                string json = File.ReadAllText(appConfigFileName);
+                clientConfig = JsonSerializer.Deserialize<Dictionary<string, object>>(json, jsonSerializerOptions);
             }
             catch (JsonException ex)
             {
@@ -97,75 +103,84 @@ namespace BoxLib
                 return;
             }
 
-            // Get the existing config object or create a new one
-            var config = ReadBoxClientConfig(configFilePath);
-            var boxClientConfigObject = new BoxClientConfigObject
+            // Get or create the profile
+            if (!config.Profiles.ContainsKey(profile))
             {
-                ClientType = clientType,
-                ClientConfig = new Dictionary<string, object> { },
-                AsUser = config.AsUser
-            };
+                config.Profiles[profile] = new BoxClientConfigObject();
+            }
+            config.Profiles[profile].ClientType = clientType;
+            config.Profiles[profile].ClientConfig = clientConfig;
 
-            try
-            {
-                boxClientConfigObject = ReadBoxClientConfig(configFilePath);
-            }
-            catch (JsonException)
-            {
-                // Handle the case where the config file is not in the expected format
-                Console.WriteLine($"Error reading config file: {configFilePath}. Creating a new one.");
-            }
-            catch (FileNotFoundException)
-            {
-                // Handle the case where the config file does not exist
-                Console.WriteLine($"Config file not found: {configFilePath}. Creating a new one.");
-            }
-
-            // Update (or create) the config object with the new client type and config
-            config.ClientConfig = clientConfig;
-            config.ClientType = clientType;
-            try
-            {
-                WriteBoxClientConfig(config, configFilePath);
-            }
-            catch (IOException ex)
-            {
-                Console.WriteLine($"IO error writing config file: {ex.Message}");
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                Console.WriteLine($"Access denied writing config file: {ex.Message}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Unexpected error writing config file: {ex.Message}");
-            }
+            WriteBoxUtilsConfig(config);
         }
 
-        public static string? GetClientAppConfigAsString(string? profileName = null)
+        public static string GetClientAppConfigAsString(string? profileName = null)
         {
-            string configFilePath = GetConfigFilePath(profileName);
-            if (!System.IO.File.Exists(configFilePath))
+            var config = ReadBoxUtilsConfig();
+            string profile = profileName ?? config.currentProfile;
+            if (!config.Profiles.ContainsKey(profile))
             {
-                Console.WriteLine($"Configuration file not found: {configFilePath}");
-                return null;
+                throw new BoxException($"Profile not found: {profile}");
             }
-
-            var config = ReadBoxClientConfig(configFilePath);
-
-            // Extract ClientConfig as JSON string
-            if (config.ClientConfig == null)
-            {
-                return null;
-            }
-            return JsonSerializer.Serialize(config.ClientConfig, jsonSerializerOptions);
+            var clientConfig = config.Profiles[profile].ClientConfig;
+            return JsonSerializer.Serialize(clientConfig, jsonSerializerOptions);
         }
 
         public static string? GetAsUser(string? profileName = null)
         {
-            var configFilePath = GetConfigFilePath(profileName);
-            var config = ReadBoxClientConfig(configFilePath);
-            return config.AsUser;
+            var config = ReadBoxUtilsConfig();
+            string profile = profileName ?? config.currentProfile;
+            if (!config.Profiles.ContainsKey(profile))
+            {
+                return null;
+            }
+            return config.Profiles[profile].AsUser;
+        }
+
+        public static void SetCurrentProfile(string profileName)
+        {
+            var config = ReadBoxUtilsConfig();
+            if (!config.Profiles.ContainsKey(profileName))
+            {
+                config.Profiles[profileName] = new BoxClientConfigObject();
+            }
+            config.currentProfile = profileName;
+            WriteBoxUtilsConfig(config);
+        }
+
+        public static string GetCurrentProfile()
+        {
+            var config = ReadBoxUtilsConfig();
+            return config.currentProfile;
+        }
+
+        public static IEnumerable<string> ListProfiles()
+        {
+            var config = ReadBoxUtilsConfig();
+            return config.Profiles.Keys;
+        }
+
+        // New method to print all profiles to the console
+        public static void PrintProfiles()
+        {
+            var profiles = ListProfiles();
+            Console.WriteLine("Available profiles:");
+            foreach (var profile in profiles)
+            {
+                Console.WriteLine($"- {profile}");
+            }
+        }
+
+        public static void SetAsUser(string asUser, string? profileName = null)
+        {
+            var config = ReadBoxUtilsConfig();
+            string profile = profileName ?? config.currentProfile;
+            if (!config.Profiles.ContainsKey(profile))
+            {
+                throw new BoxException($"Profile not found: {profile}");
+            }
+            config.Profiles[profile].AsUser = asUser;
+            WriteBoxUtilsConfig(config);
         }
     }
 }

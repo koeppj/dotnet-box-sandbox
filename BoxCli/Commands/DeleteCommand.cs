@@ -1,3 +1,4 @@
+using System.CommandLine;
 using BoxLib;
 
 namespace BoxCli.Commands
@@ -18,16 +19,16 @@ namespace BoxCli.Commands
                 Console.WriteLine("Usage: del <fileOrFolderId>");
                 return;
             }
+
+            await DoWork(args[0]);
+        }
+
+        public async Task DoWork(string itemId)
+        {
             try
             {
-                var itemId = boxItemFetcher.GetItemIdByName(args[0]);
-                if (itemId == null)
-                {
-                    Console.WriteLine($"Item '{args[0]}' not found.");
-                    return;
-                }
                 await boxUtils.DeleteFile(itemId);
-                Console.WriteLine($"Item '{args[0]}' deleted successfully.");
+                Console.WriteLine($"Item '{itemId}' deleted successfully.");
             }
             catch (Exception ex)
             {
@@ -44,6 +45,28 @@ namespace BoxCli.Commands
                     Console.WriteLine($"Error refreshing items: {ex.Message}");
                 }
             }
+        }
+
+        public static System.CommandLine.Command CreateCommand(
+            Func<string> getCurrentFolderId,
+            Action<string> setCurrentFolderId,
+            BoxUtils boxUtils,
+            BoxItemFetcher boxItemFetcher)
+        {
+            var itemArg = new System.CommandLine.Argument<string>("itemId", "ID of the file or folder to delete")
+            {
+                Arity = System.CommandLine.ArgumentArity.ExactlyOne
+            };
+            var command = new System.CommandLine.Command("del", "Delete a file or folder")
+            {
+                itemArg
+            };
+            command.SetHandler(async (item) =>
+            {
+                var cmd = new DeleteCommand(getCurrentFolderId, setCurrentFolderId, boxUtils, boxItemFetcher);
+                await cmd.DoWork(item);
+            }, itemArg);
+            return command; 
         }
     }
 }

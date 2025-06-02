@@ -1,45 +1,31 @@
-using BoxLib;
 using System.CommandLine;
+using System.Text.RegularExpressions; // Add for regex
 
-namespace BoxCli.Commands
+namespace BoxCli
 {
-    class ListCommand : Command
+    partial class Program
     {
-        public ListCommand(
-            Func<string> getCurrentFolderId,
-            Action<string> setCurrentFolderId,
-            BoxUtils boxUtils,
-            BoxItemFetcher boxItemFetcher)
-            : base(getCurrentFolderId, setCurrentFolderId, boxUtils, boxItemFetcher) { }
-
-        public override Task Execute(string[] args)
+        private Task DoListCmd(string? filter = null, string? type = null)
         {
-            // Use System.CommandLine to parse arguments
-            string? filter = null;
-            string? type = null;
-
-            var filterArg = new System.CommandLine.Argument<string?>("filter", () => null, "Optional filter string");
-            var typeOpt = new System.CommandLine.Option<string>(["--type", "-t"], description: "Type to filter (folder/file)");
-
-            var rootCommand = new System.CommandLine.RootCommand
+            if (boxItemFetcher == null)
             {
-                filterArg,
-                typeOpt,
-            };
-
-            // Remove the handler assignment, parse manually:
-            var parseResult = rootCommand.Parse(args);
-            filter = parseResult.GetValueForArgument(filterArg);
-            type = parseResult.GetValueForOption(typeOpt);
-
+                Console.WriteLine("BoxItemFetcher is not initialized.");
+                return Task.CompletedTask;
+            }
             try
             {
                 var items = boxItemFetcher.GetItemsSnapshot();
+                Regex? filterRegex = null;
+                if (!string.IsNullOrEmpty(filter))
+                {
+                    var pattern = "^" + Regex.Escape(filter).Replace("\\*", ".*") + "$";
+                    filterRegex = new Regex(pattern, RegexOptions.IgnoreCase);
+                }
                 foreach (var item in items)
                 {
                     if (!string.IsNullOrEmpty(type) && item.Type.ToString().ToLower() != type.ToLower())
                         continue;
-                    if (!string.IsNullOrEmpty(filter) && !item.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                    if (filterRegex != null && !filterRegex.IsMatch(item.Name))
                         continue;
                     Console.WriteLine($"{item.Type.ToString().ToLower()}\t{item.Id}\t{item.Name}");
                 }
@@ -49,6 +35,25 @@ namespace BoxCli.Commands
                 Console.WriteLine($"Error listing folder: {ex.Message}");
             }
             return Task.CompletedTask;
+        }
+
+        private System.CommandLine.Command ListCommand()
+        {
+            var filterArg = new System.CommandLine.Argument<string?>("filter", "Optional filter string")
+            {
+                Arity = System.CommandLine.ArgumentArity.ZeroOrOne
+            };
+            var typeOption = new System.CommandLine.Option<string>(["--type", "-t"], "Type to filter (folder/file)");
+            var command = new System.CommandLine.Command("ls", "List items in the current folder")
+            {
+                filterArg,
+                typeOption
+            };
+            command.SetHandler(async (string? filter, string? type) =>
+            {
+                await DoListCmd(filter, type);
+            }, filterArg, typeOption);
+            return command;
         }
     }
 }

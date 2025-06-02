@@ -1,149 +1,51 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace BoxCli
 {
-    public class TypeaheadCommandReader
+    public partial class TypeaheadCommandReader : IAutoCompleteHandler
     {
         private readonly BoxItemFetcher _boxItemFetcher;
 
         public TypeaheadCommandReader(BoxItemFetcher boxItemFetcher)
         {
             _boxItemFetcher = boxItemFetcher;
+            ReadLine.AutoCompletionHandler = this;
         }
+
+        public char[] Separators { get; set; } = new[] { ' ' };
 
         public async Task<string[]> ReadCommandAsync()
         {
-            return await Task.Run(() =>
-            {
-                var buffer = new List<char>();
-                var words = new List<string>();
-                bool isFirstWord = true;
-                ConsoleKeyInfo key;
-
-                while (true)
-                {
-                    key = Console.ReadKey(intercept: true);
-
-                    if (key.Key == ConsoleKey.Enter)
-                    {
-                        if (buffer.Count > 0)
-                        {
-                            words.Add(new string(buffer.ToArray()));
-                        }
-                        Console.WriteLine();
-                        break;
-                    }
-                    else if (key.Key == ConsoleKey.Spacebar)
-                    {
-                        if (buffer.Count > 0)
-                        {
-                            words.Add(new string(buffer.ToArray()));
-                            buffer.Clear();
-                            isFirstWord = false;
-                            Console.Write(" ");
-                        }
-                    }
-                    else if (key.Key == ConsoleKey.Backspace)
-                    {
-                        if (buffer.Count > 0)
-                        {
-                            buffer.RemoveAt(buffer.Count - 1);
-                            Console.Write("\b \b");
-                        }
-                        else if (words.Count > 0)
-                        {
-                            // Remove the last word and put it back into the buffer
-                            string lastWord = words[words.Count - 1];
-                            words.RemoveAt(words.Count - 1);
-                            // Erase the space and the word from the console
-                            for (int i = 0; i < lastWord.Length + 1; i++)
-                            {
-                                Console.Write("\b \b");
-                            }
-                            foreach (char c in lastWord)
-                            {
-                                buffer.Add(c);
-                            }
-                            isFirstWord = words.Count == 0;
-                        }
-                    }
-                    else
-                    {
-                        buffer.Add(key.KeyChar);
-                        Console.Write(key.KeyChar);
-
-                        // Typeahead logic for non-command words
-                        if (!isFirstWord && buffer.Count > 0)
-                        {
-                            char firstChar = buffer[0];
-                            if (firstChar != '.' && firstChar != '/' && firstChar != '-')
-                            {
-                                string partial = new string(buffer.ToArray());
-                                var match = _boxItemFetcher.GetItemByPartialName(partial);
-                                if (match.FirstMatch != null && !match.HasMultipleMatches)
-                                {
-                                    string completion = match.FirstMatch.Name.Substring(partial.Length);
-                                    if (!string.IsNullOrEmpty(completion))
-                                    {
-                                        Console.ForegroundColor = ConsoleColor.DarkGray;
-                                        Console.Write(completion);
-                                        Console.ResetColor();
-
-                                        var tabKey = Console.ReadKey(intercept: true);
-                                        if (tabKey.Key == ConsoleKey.Tab)
-                                        {
-                                            // Move cursor back over the greyed-out completion
-                                            for (int i = 0; i < completion.Length; i++)
-                                            {
-                                                Console.Write("\b");
-                                            }
-                                            // Write the completion in normal color
-                                            Console.Write(completion);
-
-                                            foreach (var c in completion)
-                                            {
-                                                buffer.Add(c);
-                                            }
-                                        }
-                                        else if (tabKey.Key == ConsoleKey.Enter)
-                                        {
-                                            // Move cursor back over the greyed-out completion
-                                            for (int i = 0; i < completion.Length; i++)
-                                            {
-                                                Console.Write("\b");
-                                            }
-                                            // Write the completion in normal color
-                                            Console.Write(completion);
-
-                                            foreach (var c in completion)
-                                            {
-                                                buffer.Add(c);
-                                            }
-
-                                            if (buffer.Count > 0)
-                                            {
-                                                words.Add(new string(buffer.ToArray()));
-                                            }
-                                            Console.WriteLine();
-                                            break;
-                                        }
-                                        else
-                                        {
-                                            for (int i = 0; i < completion.Length; i++)
-                                            {
-                                                Console.Write("\b \b");
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                return words.ToArray();
-            });
+            string input = await Task.Run(() => ReadLine.Read());
+            ReadLine.AddHistory(input);
+            return Utils.ParseWords(input);
         }
+
+        public string[] GetSuggestions(string text, int index)
+        {
+            // Only evaluate the portion after the last space or quote
+            int lastSpaceIndex = text.LastIndexOf(' ');
+            int lastSingleQuoteIndex = text.LastIndexOf('\'');
+            int lastDoubleQuoteIndex = text.LastIndexOf('"');
+            int lastArgStart = Math.Max(lastSpaceIndex, Math.Max(lastSingleQuoteIndex, lastDoubleQuoteIndex));
+            string evalText = lastArgStart >= 0 ? text.Substring(lastArgStart + 1) : text;
+
+            // Only suggest for non-command words
+            if (string.IsNullOrWhiteSpace(evalText) || evalText.StartsWith(".") || evalText.StartsWith("/") || evalText.StartsWith("-"))
+                return Array.Empty<string>();
+
+            // Determine if the argument started with a quote
+            char? quoteChar = null;
+            if (lastArgStart == lastSingleQuoteIndex)
+                quoteChar = '\'';
+            else if (lastArgStart == lastDoubleQuoteIndex)
+                quoteChar = '"';
+
+            var match = _boxItemFetcher.GetItemByPartialName(evalText);
+            string suggestion = match.FirstMatch != null ? match.FirstMatch.Name : evalText;
+            if (quoteChar.HasValue)
+                return new[] { quoteChar.Value + suggestion };
+            return new[] { suggestion };
+        }
+
     }
 }
