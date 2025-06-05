@@ -29,9 +29,14 @@ namespace BoxLib
             var configFile = BoxCliConfig.GetClientAppConfigAsString(profile);
             var auth = new BoxJwtAuth(JwtConfig.FromConfigJsonString(configFile));
             var client = new BoxClient(auth);
-            if (!string.IsNullOrEmpty(asUserId))
+
+            // Check if asUser is set in the profile config
+            var profileAsUserId = BoxCliConfig.GetAsUser(profile);
+            var effectiveAsUserId = !string.IsNullOrEmpty(asUserId) ? asUserId : profileAsUserId;
+
+            if (!string.IsNullOrEmpty(effectiveAsUserId))
             {
-                _client = client.WithAsUserHeader(asUserId);
+                _client = client.WithAsUserHeader(effectiveAsUserId);
             }
             else
             {
