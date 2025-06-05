@@ -56,7 +56,7 @@ namespace BoxCli
         }
 
 
-        static async Task Main(string[] args)
+        static async Task<int> Main(string[] args)
         {
             // Define command line options
             var profileOption = new Option<string>(
@@ -72,46 +72,19 @@ namespace BoxCli
                 asUserOption
             };
 
-            var setCientConfigCommand = new System.CommandLine.Command("set-client", "Save client configuration");
-            var setClientConfigOption = new Option<string>(
-                ["--profile", "-p"],
-                description: "Box profile name to use for authentication.")
-            { IsRequired = true };
-            var clientTypeOption = new Option<BoxClientType>(
-                ["--client-type", "-t"],
-                description: "Client type (Jwt, ClientCredentials, OAuth).");
-            setCientConfigCommand.SetHandler((profile, clientType) =>
-            {
-                // Logic to save client configuration
-                BoxCliConfig.SetClientAppConfig(profile, clientType);
-            }, setClientConfigOption, clientTypeOption);
+            rootCommand.AddCommand(BoxLibCmds.CreateBoxLibCommand());
 
             rootCommand.Description = "Box CLI";
-
-            string? profile = null;
-            string? asUser = null;
-
-            rootCommand.SetHandler((string profileValue, string? asUserValue) =>
+            rootCommand.SetHandler(async (string profile, string? asUser) =>
             {
-                profile = profileValue;
-                asUser = asUserValue;
+                AnsiConsole.Markup("[bold] Authenticating...[/]");
+                var program = new Program(profile, asUser);
+                AnsiConsole.MarkupLine("[green] Authentication successful![/]");
+                await program.Run();
             }, profileOption, asUserOption);
-            rootCommand.Add(setCientConfigCommand);
 
-            var cmd = rootCommand.Parse(args);
-
-            // Check if a subcommand (other than root) was specified
-            if (cmd.CommandResult.Command != rootCommand)
-            {
-                // Run the subcommand and exit
-                await rootCommand.InvokeAsync(args);
-                return;
-            }
-
-            AnsiConsole.Markup("[bold] Authenticating...[/]");
-            var program = new Program(profile, asUser);
-            AnsiConsole.MarkupLine("[green] Authentication successful![/]");
-            await program.Run();
+            return await rootCommand.InvokeAsync(args);
+            
         }
     }
 }

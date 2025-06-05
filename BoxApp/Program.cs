@@ -45,6 +45,7 @@ class Program
                             {
                                 Console.WriteLine($"{item.Type.ToString().ToLower()} called '{item.Name}' with ID {item.Id}");
                             }
+                            Console.WriteLine($"Total items: {items.Items.Count} and next marker: {items.NextMarker}");
                             if (items.NextMarker == null)
                             {
                                 done = true;

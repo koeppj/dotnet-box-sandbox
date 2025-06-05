@@ -163,11 +163,19 @@ namespace BoxLib
         // New method to print all profiles to the console
         public static void PrintProfiles()
         {
-            var profiles = ListProfiles();
+            var config = ReadBoxUtilsConfig();
+            var profiles = config.Profiles.Keys;
             Console.WriteLine("Available profiles:");
             foreach (var profile in profiles)
             {
-                Console.WriteLine($"- {profile}");
+                if (profile == config.currentProfile)
+                {
+                    Console.WriteLine($"* {profile}");
+                }
+                else
+                {
+                    Console.WriteLine($"- {profile}");
+                }
             }
         }
 

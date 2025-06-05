@@ -26,6 +26,10 @@ namespace BoxLib
                 IsRequired = true,
                 ArgumentHelpName = "client-type"
             };
+            var profileArgument = new Argument<string>("profile", "Profile name to use for the configuration")
+            {
+                Arity = ArgumentArity.ExactlyOne
+            };
 
             var setClientConfigCommand = new Command("set-client-config", "Set the Box client configuration")
             {
@@ -74,12 +78,12 @@ namespace BoxLib
             // New command to set the current profile
             var setCurrentProfileCommand = new Command("set-current-profile", "Set the current Box configuration profile")
             {
-                profileOption
+                profileArgument
             };
             setCurrentProfileCommand.SetHandler((profile) =>
             {
                 BoxCliConfig.SetCurrentProfile(profile);
-            }, profileOption);
+            }, profileArgument);
             boxLibCommand.AddCommand(setCurrentProfileCommand);
 
             return boxLibCommand;

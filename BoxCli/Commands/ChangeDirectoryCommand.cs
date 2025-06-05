@@ -29,12 +29,12 @@ namespace BoxCli
                         AnsiConsole.WriteLine($"Folder '{part}' not found.");
                         return;
                     }
-                    await boxItemFetcher.PopulateItemsAsync(itemId);
+                    boxItemFetcher.PopulateItemsAsync(itemId);
                     folderPath.Push(itemId);
                 }
             }
             // Ensure items are loaded for the final folder
-            await boxItemFetcher.PopulateItemsAsync(folderPath.Peek());
+            boxItemFetcher.PopulateItemsAsync(folderPath.Peek());
         }
 
         private Command ChangeDirectory()

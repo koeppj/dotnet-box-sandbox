@@ -68,12 +68,23 @@ namespace BoxLib
         // <param name="folderId">The ID of the folder to list items from.</param>
         public async Task<ListFolderItemsReturn> ListFolderItemsAsync(string folderId, string? nextMarker = null)
         {
-            GetFolderItemsQueryParams queryParams = new GetFolderItemsQueryParams
+            GetFolderItemsQueryParams queryParams;
+            if (nextMarker != null)
             {
-                Limit = 1000,
-                Usemarker = true,
-                Marker = !string.IsNullOrEmpty(nextMarker) ? nextMarker : null
-            };
+                queryParams = new GetFolderItemsQueryParams
+                {
+                    Limit = 1000,
+                    Usemarker = true,
+                    Marker = nextMarker
+                };
+            }
+            else
+            {
+                queryParams = new GetFolderItemsQueryParams
+                {
+                    Limit = 1000
+                };
+            }
             var folder = await _client.Folders.GetFolderItemsAsync(folderId, queryParams);
             var result = new List<BoxItem>();
             if (folder.Entries != null)
